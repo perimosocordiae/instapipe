@@ -7,6 +7,7 @@ See the simple, bash-based prototype for an idea of how it works.
 import cmd
 import curses
 import subprocess
+from argparse import ArgumentParser
 from curses import ascii, textpad, wrapper
 from subprocess import check_output, CalledProcessError
 
@@ -82,42 +83,44 @@ class CursesFile(object):
     pass
 
 
-def make_textbox(scr, h, w, y, x, deco=None, text_color=0, deco_color=0):
+def make_textbox(scr, h, w, y, x, deco, init_txt, text_color, deco_color):
   win_x,win_y,win_w,win_h = x,y,w,h
-  if deco is 'frame':
+  if deco == 'frame':
     win_x += 1
     win_y += 1
-    win_h -= 2
+    h += 2
     win_w -= 2
-  elif deco is 'underline':
-    win_h -= 1
+  elif deco == 'underline':
+    h += 1
   win = curses.newwin(win_h, win_w, win_y, win_x)
   box = textpad.Textbox(win, insert_mode=True)
-  if deco is 'frame':
+  if deco == 'frame':
     scr.attron(deco_color)
     textpad.rectangle(scr, y, x, y+h-1, x+w-1)
     scr.attroff(deco_color)
-  elif deco is 'underline':
+  elif deco == 'underline':
     scr.hline(y+h-1, x, curses.ACS_HLINE, w, deco_color)
   win.attron(text_color)
   scr.move(win_y, win_x)
   win.noutrefresh()
-  return box
+  win.addstr(0, 0, init_txt)
+  return box, h
 
 
-def make_gui(scr, txt_h, deco):
+def make_gui(scr, txt_h, deco, init_cmd, text_color, deco_color):
   scr_h, scr_w = scr.getmaxyx()
-  txt_box = make_textbox(scr, txt_h, scr_w, 0, 0, deco=deco,
-                         text_color=curses.color_pair(0),
-                         deco_color=curses.color_pair(1))
-  out_win = curses.newwin(scr_h-txt_h, scr_w, txt_h, 0)
+  txt_box, tot_h = make_textbox(scr, txt_h, scr_w, 0, 0, deco, init_cmd,
+                                text_color, deco_color)
+  out_win = curses.newwin(scr_h-tot_h, scr_w, tot_h, 0)
   out_win.noutrefresh()
   return txt_box, out_win
 
 
-def main(scr, txt_h=3, deco='frame'):
+def gui_main(scr, init_cmd, txt_h, deco):
   curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
-  txt_box, out_win = make_gui(scr, txt_h, deco)
+  txt_box, out_win = make_gui(scr, txt_h, deco, init_cmd,
+                              curses.color_pair(0),
+                              curses.color_pair(1))
   repl = InstaPipe(txt_box, out_win)
   scr.refresh()
   try:
@@ -127,8 +130,20 @@ def main(scr, txt_h=3, deco='frame'):
   return repl.last_cmd
 
 
-if __name__ == '__main__':
-  final_cmd = wrapper(main)
+def main():
+  ap = ArgumentParser()
+  ap.add_argument('--input-lines', type=int, default=1, metavar='N',
+                  help='Number of lines for input pane [%(default)s]')
+  ap.add_argument('--input-deco', default='frame',
+                  choices=('none', 'underline', 'frame'),
+                  help='Decoration for input pane [%(default)s]')
+  args, init_cmd = ap.parse_known_args()
+  final_cmd = wrapper(gui_main, ' '.join(init_cmd), args.input_lines,
+                      args.input_deco)
   if final_cmd:
     print final_cmd
+
+
+if __name__ == '__main__':
+  main()
 
