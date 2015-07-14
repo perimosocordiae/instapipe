@@ -1,3 +1,4 @@
+#!/usr/bin/python
 '''
 Insta-pipe: A tool for rapid development of complicated shell commands.
 
@@ -16,15 +17,20 @@ class InstaPipe(cmd.Cmd):
                            stdout=CursesFile(out_win))
     self.prompt = ''  # No prompt
     self.use_rawinput = False  # Use the provided stdin/stdout
+    self.last_cmd = ''  # The last successful command
 
   def default(self, line):
-    cmd = line.strip() + '|head'
+    cmd = line + '|head'
     try:
       result = check_output(cmd, shell=True, stderr=subprocess.STDOUT)
     except CalledProcessError as e:
       self.stdout.write(str(e))
     else:
       self.stdout.write(result)
+      self.last_cmd = line
+
+  def emptyline(self):
+    return False
 
   def do_EOF(self, line):
     return True
@@ -112,13 +118,17 @@ def make_gui(scr, txt_h, deco):
 def main(scr, txt_h=3, deco='frame'):
   curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
   txt_box, out_win = make_gui(scr, txt_h, deco)
+  repl = InstaPipe(txt_box, out_win)
   scr.refresh()
   try:
-    InstaPipe(txt_box, out_win).cmdloop()
+    repl.cmdloop()
   except KeyboardInterrupt:
-    pass
+    return
+  return repl.last_cmd
 
 
 if __name__ == '__main__':
-  wrapper(main)
+  final_cmd = wrapper(main)
+  if final_cmd:
+    print final_cmd
 
