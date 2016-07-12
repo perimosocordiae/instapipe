@@ -7,21 +7,22 @@ See the simple, bash-based prototype for an idea of how it works.
 import cmd
 import curses
 import subprocess
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from curses import ascii, textpad, wrapper
 from subprocess import check_output, CalledProcessError
 
 
 class InstaPipe(cmd.Cmd):
-  def __init__(self, txt_box, out_win):
+  def __init__(self, txt_box, out_win, out_lines):
     cmd.Cmd.__init__(self, stdin=TextpadFile(txt_box),
-                           stdout=CursesFile(out_win))
+                     stdout=CursesFile(out_win))
     self.prompt = ''  # No prompt
     self.use_rawinput = False  # Use the provided stdin/stdout
     self.last_cmd = ''  # The last successful command
+    self.summary_cmd = '| head -n%d' % out_lines
 
   def default(self, line):
-    cmd = line + '|head'
+    cmd = line + self.summary_cmd
     try:
       result = check_output(cmd, shell=True, stderr=subprocess.STDOUT)
     except CalledProcessError as e:
@@ -45,7 +46,7 @@ class TextpadFile(object):
   '''Read-only file-like object that gets text from a textpad.'''
   def __init__(self, pad):
     self.txtpad = pad
-    self.last_pos = 0,0
+    self.last_pos = (0, 0)
 
     def validator(ch):
       # Convert newlines (enter key) to terminators (ctrl-G)
@@ -111,18 +112,21 @@ def make_gui(scr, txt_h, deco, init_cmd, text_color, deco_color):
   scr_h, scr_w = scr.getmaxyx()
   txt_box, tot_h = make_textbox(scr, txt_h, scr_w, 0, 0, deco, init_cmd,
                                 text_color, deco_color)
-  out_win = curses.newwin(scr_h-tot_h, scr_w, tot_h, 0)
+  out_lines = scr_h - tot_h
+  out_win = curses.newwin(out_lines, scr_w, tot_h, 0)
   out_win.noutrefresh()
-  return txt_box, out_win
+  return txt_box, out_win, out_lines - 1
 
 
 def gui_main(scr, init_cmd, txt_h, deco):
   curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
-  txt_box, out_win = make_gui(scr, txt_h, deco, init_cmd,
-                              curses.color_pair(0),
-                              curses.color_pair(1))
-  repl = InstaPipe(txt_box, out_win)
+  repl = InstaPipe(*make_gui(scr, txt_h, deco, init_cmd, curses.color_pair(0),
+                             curses.color_pair(1)))
   scr.refresh()
+
+  if init_cmd:
+    repl.default(init_cmd)
+
   try:
     repl.cmdloop()
   except KeyboardInterrupt:
@@ -131,12 +135,12 @@ def gui_main(scr, init_cmd, txt_h, deco):
 
 
 def main():
-  ap = ArgumentParser()
+  ap = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
   ap.add_argument('--input-lines', type=int, default=1, metavar='N',
-                  help='Number of lines for input pane [%(default)s]')
+                  help='Number of lines for input pane')
   ap.add_argument('--input-deco', default='frame',
                   choices=('none', 'underline', 'frame'),
-                  help='Decoration for input pane [%(default)s]')
+                  help='Decoration for input pane')
   args, init_cmd = ap.parse_known_args()
   final_cmd = wrapper(gui_main, ' '.join(init_cmd), args.input_lines,
                       args.input_deco)
@@ -146,4 +150,3 @@ def main():
 
 if __name__ == '__main__':
   main()
-

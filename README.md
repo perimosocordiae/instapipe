@@ -9,7 +9,6 @@ first n lines will appear in the preview pane.
 
  - Avoid blocking until the command completes, by using `Popen`
    and reading the result line by line. (Will require a working `flush`).
- - Instead of 10 lines, fill the preview pane dynamically.
  - Add an 'instant' mode, where commands are sent on every character.
  - Do some basic caching to avoid recomputing repeated results.
  - Allow new commands to interrupt running ones.
