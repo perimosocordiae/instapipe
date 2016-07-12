@@ -26,7 +26,10 @@ class InstaPipe(cmd.Cmd):
   def default(self, line):
     args = [SHELL, '-o', 'pipefail', '-c', line + self.summary_cmd]
     p = Popen(args, stdout=PIPE, stderr=STDOUT)
-    result, _ = p.communicate()
+    try:
+      result, _ = p.communicate()
+    except KeyboardInterrupt:
+      result = 'Killed by user.'
     self.stdout.write(result)
 
     if p.returncode == 0:
