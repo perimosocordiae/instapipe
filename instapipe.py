@@ -6,10 +6,12 @@ See the simple, bash-based prototype for an idea of how it works.
 '''
 import cmd
 import curses
-import subprocess
+import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from curses import ascii, textpad, wrapper
-from subprocess import check_output, CalledProcessError
+from subprocess import Popen, PIPE, STDOUT
+
+SHELL = os.environ.get('SHELL', '/bin/bash')
 
 
 class InstaPipe(cmd.Cmd):
@@ -22,14 +24,18 @@ class InstaPipe(cmd.Cmd):
     self.summary_cmd = '| head -n%d' % out_lines
 
   def default(self, line):
-    cmd = line + self.summary_cmd
-    try:
-      result = check_output(cmd, shell=True, stderr=subprocess.STDOUT)
-    except CalledProcessError as e:
-      self.stdout.write(str(e))
-    else:
-      self.stdout.write(result)
+    args = [SHELL, '-o', 'pipefail', '-c', line + self.summary_cmd]
+    p = Popen(args, stdout=PIPE, stderr=STDOUT)
+    result, _ = p.communicate()
+    self.stdout.write(result)
+
+    if p.returncode == 0:
+      # successful command, save the input line
       self.last_cmd = line
+    elif not result:
+      # failed command with no output, write an error message
+      self.stdout.write("Command '%s' returned non-zero exit status %d" % (
+                        line, p.returncode))
 
   def emptyline(self):
     return False
@@ -77,7 +83,10 @@ class CursesFile(object):
     if not txt:
       return
     self.win.erase()
-    self.win.addstr(0, 0, txt)
+    try:
+      self.win.addstr(0, 0, txt)
+    except curses.error:
+      pass
     self.win.noutrefresh()
 
   def flush(self):
@@ -115,7 +124,7 @@ def make_gui(scr, txt_h, deco, init_cmd, text_color, deco_color):
   out_lines = scr_h - tot_h
   out_win = curses.newwin(out_lines, scr_w, tot_h, 0)
   out_win.noutrefresh()
-  return txt_box, out_win, out_lines - 1
+  return txt_box, out_win, out_lines
 
 
 def gui_main(scr, init_cmd, txt_h, deco):
@@ -145,6 +154,7 @@ def main():
   final_cmd = wrapper(gui_main, ' '.join(init_cmd), args.input_lines,
                       args.input_deco)
   if final_cmd:
+    # TODO: make this easier to use in the user's shell
     print final_cmd
 
 
